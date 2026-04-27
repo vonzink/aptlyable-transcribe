@@ -3,10 +3,10 @@
 **AptlyAble** is a production-ready MVP for bulk MP3 transcription. Drag
 and drop one or many MP3 files into the web app, pick a transcription
 engine, and AptlyAble uploads to S3, queues a job per file, and runs
-each through the chosen provider on a long-lived EC2 worker. Transcripts
-and raw provider JSON are stored back in S3; job metadata lives in
-DynamoDB. The dashboard polls for status and lets you view, copy, and
-download the results.
+each through the chosen provider on a scale-to-zero ECS Fargate Spot
+worker. Transcripts and raw provider JSON are stored back in S3; job
+metadata lives in DynamoDB. The dashboard polls for status and lets you
+view, copy, and download the results.
 
 **Supported transcription engines** (per-job, picked at upload time):
 - **Deepgram Nova-3** — speaker labels, very fast, no per-file size cap. **Default.**
@@ -20,7 +20,7 @@ download the results.
   automatically. See "Twilio integration" below.
 
 > ⚠️ **Security notice.** AptlyAble keeps each provider API key in **AWS
-> Secrets Manager** and only the EC2 worker can read them. The frontend
+> Secrets Manager** and only the worker task role can read them. The frontend
 > never sees a key. **If any of your provider keys (Deepgram, OpenAI,
 > AssemblyAI) has ever been exposed in client-side code, version
 > control, screenshots, or chat logs — rotate it immediately at the
@@ -35,11 +35,13 @@ download the results.
 3. Frontend uploads files directly to S3 (3–5 concurrent uploads).
 4. Frontend tells the API the uploads are complete; the API enqueues an
    SQS message per file.
-5. The EC2 worker long-polls SQS, generates a short-lived presigned GET
-   URL for each MP3, and hands it to Deepgram's prerecorded API.
+5. CloudWatch sees the queue go non-empty and scales the Fargate worker
+   service from 0 → 1 task. The worker long-polls SQS, generates a
+   short-lived presigned GET URL for each MP3, and hands it to the
+   chosen provider's API.
 6. Worker writes `transcripts/<jobId>/transcript.txt` and
-   `transcripts/<jobId>/deepgram.json` to S3, updates the DynamoDB row to
-   `completed`, and deletes the SQS message.
+   `transcripts/<jobId>/<provider>.json` to S3, updates the DynamoDB row
+   to `completed`, and deletes the SQS message.
 7. The frontend polls `GET /api/jobs` and renders status, transcript
    preview, and download buttons.
 
@@ -62,8 +64,8 @@ download the results.
                                                     │ SQS poll
                                                     ▼
                                           ┌──────────────────┐
-                                          │ EC2 worker (TS)  │
-                                          │ Deepgram Nova-3  │
+                                          │ Fargate Spot     │
+                                          │ worker (0..N)    │
                                           └────────┬─────────┘
                                                    │
                           transcript.txt / deepgram.json
@@ -74,19 +76,34 @@ download the results.
                                           └──────────────┘
 ```
 
-### Why SQS + EC2 worker (not Lambda for transcription)?
+### Why SQS + Fargate Spot worker (not Lambda for transcription)?
 
-- Average MP3s are 3–10 minutes, sometimes longer. Deepgram's prerecorded
-  endpoint is fast but not instant; bursts are easy to hit. A long-lived
-  worker avoids Lambda's 15-minute ceiling and cold-start churn.
+- Average MP3s are 3–10 minutes, sometimes longer. Provider responses
+  vary; AssemblyAI in particular polls. A worker that's not on Lambda's
+  15-minute clock avoids edge-case timeouts.
 - SQS gives durable retries, visibility timeout, and a DLQ for free.
-- A single EC2 process with `WORKER_CONCURRENCY` is the simplest knob
-  for rate-limiting Deepgram calls during bulk uploads.
-- Easy migration path: the same worker code can move to ECS/Fargate
-  later without changing the queue contract.
+- `WORKER_CONCURRENCY` inside the worker process is the simplest knob
+  for rate-limiting provider calls during bulk uploads.
 
-Lambda is still used for the API surface (presigned URLs, DynamoDB
-reads/writes, SQS sends) — those are short and bursty.
+Lambda still handles the API surface (presigned URLs, DynamoDB
+reads/writes, SQS sends, Twilio webhook) — those are short and bursty.
+
+### Scale-to-zero Fargate Spot
+
+The worker runs as an **ECS Fargate Spot service** that scales between
+0 and 5 tasks based on SQS depth:
+
+- `desiredCount` starts at **0** — when the queue is empty there are no
+  running tasks and you pay nothing for compute.
+- A CloudWatch alarm on `ApproximateNumberOfMessagesVisible` flips
+  desired count to 1 (or +2 for big bursts) within ~1 minute of the
+  first job arriving.
+- A second alarm on `visible + in-flight = 0` for 5 consecutive minutes
+  scales the service back down to 0.
+- Capacity provider is `FARGATE_SPOT` (~70% cheaper than on-demand).
+  Tasks can be reclaimed with 2 minutes notice; the worker handles
+  SIGTERM and drains in-flight jobs (`stopTimeout = 120s`), and any
+  unfinished message is re-delivered by SQS — idempotent on re-pickup.
 
 ---
 
@@ -96,7 +113,7 @@ reads/writes, SQS sends) — those are short and bursty.
 AptlyAble/
   apps/web/                Next.js + Tailwind frontend
   services/api/            Lambda API (handlers + AWS clients)
-  services/worker/         EC2 worker (SQS poll → Deepgram → S3 → DDB)
+  services/worker/         Fargate Spot worker (SQS poll → provider → S3 → DDB)
   infrastructure/          AWS CDK (TypeScript)
   scripts/                 deploy-worker.sh, build-all.sh, create-secret.sh
   .env.example             Reference env vars
@@ -156,17 +173,17 @@ CDK outputs:
 
 - `ApiUrl` — paste into `apps/web/.env.local` as `NEXT_PUBLIC_API_BASE_URL`
 - `BucketName`, `JobsTableName`, `QueueUrl` — for reference / debugging
-- `WorkerInstanceId` — used by `scripts/deploy-worker.sh`
+- `WorkerClusterName`, `WorkerServiceName` — handy for `aws ecs describe-services`
 
 CDK provisions:
 
 - Private S3 bucket (block public access, SSE, CORS for the configured frontend origin)
 - DynamoDB table `aptlyable-transcription-jobs` (PK `jobId`, GSI `status-createdAt-index`)
 - SQS main queue + DLQ (visibility timeout 30 min, max receive count 3)
-- Secrets Manager secret `aptlyable/deepgram/api-key` (placeholder value — set it next)
+- Secrets Manager secrets for each transcription provider + Twilio (placeholders — set them next)
 - Lambda functions for each API route, fronted by API Gateway HTTP API
-- EC2 worker instance (Amazon Linux 2023, t3.small) with instance profile, systemd unit
-- Least-privilege IAM roles for API Lambdas and the worker
+- ECS Fargate Spot service for the worker (auto-scales 0..5 on SQS depth)
+- Least-privilege IAM roles for API Lambdas and the worker task
 
 ---
 
@@ -188,8 +205,17 @@ aws secretsmanager put-secret-value \
 ```
 
 The worker fetches each key on first use and caches it for the process
-lifetime. Restart the worker (`sudo systemctl restart aptlyable-worker`,
-or just re-run `./scripts/deploy-worker.sh`) after rotating any key.
+lifetime. To pick up a rotated key, force the running task to restart:
+
+```bash
+aws ecs update-service \
+  --cluster <WorkerClusterName> \
+  --service <WorkerServiceName> \
+  --force-new-deployment
+```
+
+(Or just wait for the next scale-up — once the existing task drains and
+exits, the new one fetches the rotated secret on startup.)
 
 If a job is submitted for a provider whose key is still the placeholder,
 that single job fails with a clear error in DynamoDB. Other providers
@@ -197,32 +223,38 @@ keep working.
 
 ---
 
-## Deploy / start the EC2 worker
+## Deploying / updating the worker
 
-The CDK stack creates the EC2 instance and a `aptlyable-worker.service`
-systemd unit that expects code in `/opt/aptlyable/worker`. To push code:
+The worker is a Fargate Spot service whose container image is built
+from [`services/worker/Dockerfile`](services/worker/Dockerfile) using
+CDK's `ContainerImage.fromAsset()`. **A code change ships via**
+**`cdk deploy`** — CDK rebuilds the image, pushes it to its managed ECR
+repo, updates the Task Definition, and ECS rolls out the new revision.
 
 ```bash
 ./scripts/deploy-worker.sh
+# or directly:
+cd infrastructure && npx cdk deploy
 ```
-
-That script:
-
-1. Builds `services/worker` to plain JS.
-2. Bundles `dist/` and `package.json`.
-3. Uses **AWS Systems Manager Run Command** (`aws ssm send-command`) to
-   copy the bundle to the instance, install deps, and restart the
-   systemd service. (No SSH keys required — uses the IAM role.)
-
-You can also `ssh ec2-user@<instance>` if you opted in to a `WORKER_SSH_CIDR`.
 
 Worker logs:
 
 ```bash
 aws logs tail /aptlyable/worker --follow
-# or on the box:
-sudo journalctl -u aptlyable-worker -f
 ```
+
+Watch the service / task state:
+
+```bash
+aws ecs describe-services \
+  --cluster <WorkerClusterName> \
+  --services <WorkerServiceName> \
+  --query 'services[0].{Desired:desiredCount,Running:runningCount,Pending:pendingCount}'
+
+aws ecs list-tasks --cluster <WorkerClusterName> --service-name <WorkerServiceName>
+```
+
+You'll typically see `Desired: 0, Running: 0` when the queue is empty.
 
 ---
 
@@ -332,13 +364,15 @@ You pay for:
 - **SQS** request count (very small per job).
 - **Lambda** invocations + duration (each API call is short).
 - **API Gateway** HTTP API requests.
-- **EC2** instance-hours (the worker runs continuously — biggest fixed cost).
-- **Deepgram** transcription minutes (this dominates spend at scale).
+- **Fargate Spot** task-seconds (only while transcribing — `desiredCount=0` when idle).
+- **Provider** transcription minutes (Deepgram/OpenAI/AssemblyAI). This dominates spend at scale.
 - **CloudWatch Logs** for Lambda and worker logs.
+- **Secrets Manager** $0.40/month per secret × 4.
 
-A 24/7 `t3.small` is roughly a few US dollars per month; Deepgram and S3
-storage scale with usage. Stop the EC2 instance when you're not bulk
-processing to save the fixed cost.
+The worker scales to zero when idle, so the dominant fixed cost is
+~$1.60/month for Secrets Manager. While transcribing, a 0.5-vCPU /
+1-GB Fargate Spot task is roughly $0.012/hour. Provider costs scale
+with audio minutes processed.
 
 ---
 
@@ -349,8 +383,10 @@ processing to save the fixed cost.
 - No virus / malware scanning of uploaded MP3s.
 - No bulk ZIP export of transcripts (single-file download only).
 - Polling, not WebSockets/SSE — fine for hundreds of jobs, not thousands.
-- Worker deployment is via SSM Run Command, not full CI/CD.
-- Single EC2 instance — no auto-scaling. Move to ECS/Fargate before scale.
+- Worker deployment is via `cdk deploy`, not a CI/CD pipeline.
+- Fargate Spot can be reclaimed with 2 minutes notice; mitigated by
+  SIGTERM drain + idempotent SQS re-delivery, but still worth a
+  fallback on-demand capacity provider for production.
 - Very large MP3s (multi-GB) may need streaming uploads / multipart support.
 
 ---
@@ -362,7 +398,7 @@ processing to save the fixed cost.
 - [ ] Add malware scanning before transcription (e.g. GuardDuty Malware Protection for S3)
 - [ ] Add CloudWatch alarms (DLQ depth > 0, worker CPU, Lambda errors)
 - [ ] Add DLQ monitoring + replay tooling
-- [ ] Replace single EC2 with ECS/Fargate or an Auto Scaling Group
+- [ ] Add a regional Fargate (on-demand) capacity provider as a fallback for Spot reclamation
 - [ ] Step Functions if the workflow grows beyond transcribe-once-and-store
 - [ ] Transcript search (OpenSearch or Athena over S3)
 - [ ] Full audit logs (who triggered which job)

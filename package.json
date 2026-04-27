@@ -1,0 +1,22 @@
+{
+  "name": "aptlyable",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AptlyAble — bulk MP3 transcription (Next.js + AWS) with multi-provider transcription.",
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "services/*",
+    "infrastructure"
+  ],
+  "scripts": {
+    "build": "bash scripts/build-all.sh",
+    "build:shared": "npm --workspace packages/shared run build",
+    "build:web": "npm --workspace apps/web run build",
+    "build:api": "npm --workspace services/api run build",
+    "build:worker": "npm --workspace services/worker run build",
+    "build:infra": "npm --workspace infrastructure run build",
+    "typecheck": "npm run build:shared && npm --workspace apps/web run typecheck && npm --workspace services/api run typecheck && npm --workspace services/worker run typecheck && npm --workspace infrastructure run typecheck",
+    "test": "npm --workspace services/api run test && npm --workspace services/worker run test"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@aptlyable/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.609.0",
+    "@aws-sdk/client-s3": "^3.609.0",
+    "@aws-sdk/client-sqs": "^3.609.0",
+    "@aws-sdk/lib-dynamodb": "^3.609.0",
+    "@aws-sdk/s3-request-presigner": "^3.609.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "typescript": "^5.4.5"
+  }
+}

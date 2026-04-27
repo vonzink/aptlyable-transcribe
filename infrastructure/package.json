@@ -1,0 +1,27 @@
+{
+  "name": "@aptlyable/infrastructure",
+  "version": "0.1.0",
+  "private": true,
+  "bin": {
+    "aptlyable": "bin/aptlyable.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "synth": "cdk synth",
+    "deploy": "cdk deploy",
+    "diff": "cdk diff",
+    "destroy": "cdk destroy"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "aws-cdk": "^2.150.0",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "@aptlyable/shared": "*",
+    "aws-cdk-lib": "^2.150.0",
+    "constructs": "^10.3.0",
+    "source-map-support": "^0.5.21"
+  }
+}

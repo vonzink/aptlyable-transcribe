@@ -1,0 +1,34 @@
+# Build context is the repo root for the worker image. Everything below
+# gets excluded from the Docker build context — keeps images small and
+# builds fast.
+
+# Workspace artifacts
+node_modules
+**/node_modules
+**/dist
+**/build
+**/.next
+**/cdk.out
+**/coverage
+
+# Editor / OS
+.DS_Store
+.idea
+.vscode
+
+# Logs
+**/*.log
+logs
+
+# Secrets / env
+.env
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Misc
+*.tsbuildinfo
+worker-bundle.zip
+.git
+README.md
+**/Aptly Able/**
