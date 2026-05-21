@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'AptlyAble Bulk Transcriber',
-  description: 'Bulk MP3 transcription via Deepgram, OpenAI, and AssemblyAI.',
+  description: 'Bulk MP3 and MP4 transcription via Deepgram, OpenAI, and AssemblyAI.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

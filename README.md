@@ -1,7 +1,7 @@
 # AptlyAble
 
-**AptlyAble** is a production-ready MVP for bulk MP3 transcription. Drag
-and drop one or many MP3 files into the web app, pick a transcription
+**AptlyAble** is a production-ready MVP for bulk MP3/MP4 transcription. Drag
+and drop one or many MP3 or MP4 files into the web app, pick a transcription
 engine, and AptlyAble uploads to S3, queues a job per file, and runs
 each through the chosen provider on a scale-to-zero ECS Fargate Spot
 worker. Transcripts and raw provider JSON are stored back in S3; job
@@ -30,14 +30,14 @@ view, copy, and download the results.
 
 ## What it does
 
-1. User drops MP3 files into the dashboard.
+1. User drops MP3 or MP4 files into the dashboard.
 2. Frontend asks the API for short-lived presigned S3 PUT URLs.
 3. Frontend uploads files directly to S3 (3–5 concurrent uploads).
 4. Frontend tells the API the uploads are complete; the API enqueues an
    SQS message per file.
 5. CloudWatch sees the queue go non-empty and scales the Fargate worker
    service from 0 → 1 task. The worker long-polls SQS, generates a
-   short-lived presigned GET URL for each MP3, and hands it to the
+   short-lived presigned GET URL for each media file, and hands it to the
    chosen provider's API.
 6. Worker writes `transcripts/<jobId>/transcript.txt` and
    `transcripts/<jobId>/<provider>.json` to S3, updates the DynamoDB row
@@ -78,7 +78,7 @@ view, copy, and download the results.
 
 ### Why SQS + Fargate Spot worker (not Lambda for transcription)?
 
-- Average MP3s are 3–10 minutes, sometimes longer. Provider responses
+- Average recordings are 3–10 minutes, sometimes longer. Provider responses
   vary; AssemblyAI in particular polls. A worker that's not on Lambda's
   15-minute clock avoids edge-case timeouts.
 - SQS gives durable retries, visibility timeout, and a DLQ for free.
@@ -359,7 +359,7 @@ pending_upload  ──►  uploaded  ──►  queued  ──►  transcribing 
 
 You pay for:
 
-- **S3** storage + PUT/GET requests for MP3s and transcripts.
+- **S3** storage + PUT/GET requests for media files and transcripts.
 - **DynamoDB** reads/writes (on-demand pricing in this stack).
 - **SQS** request count (very small per job).
 - **Lambda** invocations + duration (each API call is short).
@@ -380,14 +380,14 @@ with audio minutes processed.
 
 - No authentication — any caller hitting the API URL can upload.
 - No per-user/team isolation, quotas, or rate limiting.
-- No virus / malware scanning of uploaded MP3s.
+- No virus / malware scanning of uploaded media files.
 - No bulk ZIP export of transcripts (single-file download only).
 - Polling, not WebSockets/SSE — fine for hundreds of jobs, not thousands.
 - Worker deployment is via `cdk deploy`, not a CI/CD pipeline.
 - Fargate Spot can be reclaimed with 2 minutes notice; mitigated by
   SIGTERM drain + idempotent SQS re-delivery, but still worth a
   fallback on-demand capacity provider for production.
-- Very large MP3s (multi-GB) may need streaming uploads / multipart support.
+- Very large media files (multi-GB) may need streaming uploads / multipart support.
 
 ---
 

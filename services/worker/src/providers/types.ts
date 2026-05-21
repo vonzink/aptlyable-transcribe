@@ -29,6 +29,8 @@ export interface TranscribeInput {
   signedAudioUrl: string;
   /** Reported size in bytes (used for client-side size limit checks). */
   sizeBytes: number;
+  /** Browser/API-reported media content type. */
+  contentType: string;
 }
 
 export interface TranscriptionResult {

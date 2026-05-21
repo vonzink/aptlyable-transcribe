@@ -55,7 +55,7 @@ export function TranscriptViewer({ job, onClose }: Props) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${job.fileName.replace(/\.mp3$/i, '')}.txt`;
+    a.download = `${job.fileName.replace(/\.(mp3|mp4)$/i, '')}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };

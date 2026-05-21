@@ -6,6 +6,7 @@ export * from './env';
 export * from './logger';
 export * from './limits';
 export * from './format';
+export * from './media';
 
 // AWS data-access wrappers (one place to construct clients + define keys).
 export * from './aws/clients';

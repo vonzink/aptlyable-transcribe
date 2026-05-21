@@ -6,6 +6,7 @@ import { ProviderSelector } from './ProviderSelector';
 import { formatBytes } from '@/lib/formatters';
 import type { UseUploadQueueResult } from '@/hooks/useUploadQueue';
 import { UPLOAD_LIMITS } from '@/hooks/useUploadQueue';
+import { SUPPORTED_MEDIA_ACCEPT, SUPPORTED_MEDIA_LABEL } from '@aptlyable/shared';
 
 interface Props {
   provider: TranscriptionProvider;
@@ -110,7 +111,7 @@ function DropzoneArea({
       }}
       role="button"
       tabIndex={0}
-      aria-label="Drag and drop MP3 files or click to browse"
+      aria-label={`Drag and drop ${SUPPORTED_MEDIA_LABEL} files or click to browse`}
       className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 text-center transition-colors ${
         isDragging
           ? 'border-brand-500 bg-brand-50'
@@ -120,13 +121,13 @@ function DropzoneArea({
       <input
         ref={inputRef}
         type="file"
-        accept=".mp3,audio/mpeg,audio/mp3"
+        accept={SUPPORTED_MEDIA_ACCEPT}
         multiple
         className="hidden"
         onChange={onInputChange}
       />
       <div className="text-lg font-medium text-slate-700">
-        Drop MP3 files here, or click to browse
+        Drop {SUPPORTED_MEDIA_LABEL} files here, or click to browse
       </div>
       <p className="mt-1 text-sm text-slate-500">
         Up to {UPLOAD_LIMITS.maxFileSizeMB} MB per file. Hundreds of files at a time supported.

@@ -1,5 +1,9 @@
 import { request, FormData } from 'undici';
-import { countWords, OPENAI_MAX_AUDIO_BYTES } from '@aptlyable/shared';
+import {
+  countWords,
+  defaultContentTypeForFileName,
+  OPENAI_MAX_AUDIO_BYTES,
+} from '@aptlyable/shared';
 import { config } from '../lib/config';
 import { getProviderApiKey } from '../lib/secrets';
 import {
@@ -63,7 +67,9 @@ export class OpenAIProvider implements TranscriptionProvider {
     const form = new FormData();
     form.set(
       'file',
-      new Blob([audioBuffer], { type: 'audio/mpeg' }),
+      new Blob([audioBuffer], {
+        type: input.contentType || defaultContentTypeForFileName(input.fileName),
+      }),
       input.fileName,
     );
     form.set('model', config.openaiModel);
@@ -129,4 +135,3 @@ export function formatOpenAIResponse(
     providerRequestId: requestId,
   };
 }
-

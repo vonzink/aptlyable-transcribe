@@ -156,6 +156,7 @@ async function processMessage(message: ReceivedMessage): Promise<void> {
       fileName: parsed.fileName,
       signedAudioUrl,
       sizeBytes: job.size,
+      contentType: job.contentType,
     });
     log.info('provider completed', {
       jobId,

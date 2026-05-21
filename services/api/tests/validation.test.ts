@@ -20,9 +20,10 @@ test('sanitizeFileName preserves safe punctuation', () => {
   assert.equal(sanitizeFileName('call-001_(2024).mp3'), 'call-001_(2024).mp3');
 });
 
-test('sanitizeFileName forces .mp3 extension and never returns empty', () => {
+test('sanitizeFileName keeps supported media extensions and never returns empty', () => {
   assert.equal(sanitizeFileName('////'), 'audio.mp3');
   assert.match(sanitizeFileName('no_extension'), /\.mp3$/);
+  assert.equal(sanitizeFileName('screen-recording.mp4'), 'screen-recording.mp4');
 });
 
 test('validateFile accepts legal mp3 metadata for any provider', () => {
@@ -34,13 +35,22 @@ test('validateFile accepts legal mp3 metadata for any provider', () => {
   }
 });
 
-test('validateFile rejects non-mp3 extensions', () => {
+test('validateFile accepts legal mp4 metadata for any provider', () => {
+  for (const provider of ['deepgram', 'openai', 'assemblyai'] as const) {
+    assert.deepEqual(
+      validateFile({ fileName: 'call.mp4', contentType: 'video/mp4', size: 1024 }, provider),
+      { ok: true },
+    );
+  }
+});
+
+test('validateFile rejects unsupported media extensions', () => {
   const result = validateFile(
     { fileName: 'call.wav', contentType: 'audio/wav', size: 1024 },
     'deepgram',
   );
   assert.equal(result.ok, false);
-  assert.match(result.reason ?? '', /\.mp3/);
+  assert.match(result.reason ?? '', /\.mp3.*\.mp4|\.mp4.*\.mp3/);
 });
 
 test('validateFile rejects unsupported content types', () => {

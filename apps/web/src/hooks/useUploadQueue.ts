@@ -1,7 +1,13 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import { DEFAULT_MAX_FILE_SIZE_MB, OPENAI_MAX_AUDIO_BYTES } from '@aptlyable/shared';
+import {
+  DEFAULT_MAX_FILE_SIZE_MB,
+  defaultContentTypeForFileName,
+  isSupportedMediaContentType,
+  isSupportedMediaFileName,
+  OPENAI_MAX_AUDIO_BYTES,
+} from '@aptlyable/shared';
 import type { LocalUpload, TranscriptionProvider } from '@/types/jobs';
 import { api } from '@/lib/api';
 import { putFileToS3, runWithConcurrency } from '@/lib/uploadQueue';
@@ -50,19 +56,19 @@ export function useUploadQueue(provider: TranscriptionProvider): UseUploadQueueR
     setItems((prev) => {
       const next = [...prev];
       for (const file of incoming) {
-        const isMp3 =
-          file.name.toLowerCase().endsWith('.mp3') &&
-          (file.type === '' || /audio\/(mpeg|mp3|mpeg3|x-mp3|x-mpeg-3)/i.test(file.type));
+        const isSupportedMedia =
+          isSupportedMediaFileName(file.name) &&
+          (file.type === '' || isSupportedMediaContentType(file.name, file.type));
         const tooBig = file.size > MAX_FILE_SIZE_BYTES;
         const localId = `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`;
 
-        if (!isMp3) {
+        if (!isSupportedMedia) {
           next.push({
             localId,
             file,
             status: 'rejected',
             progress: 0,
-            error: 'Only .mp3 files are supported.',
+            error: 'Only .mp3 and .mp4 files are supported.',
           });
         } else if (tooBig) {
           next.push({
@@ -104,7 +110,7 @@ export function useUploadQueue(provider: TranscriptionProvider): UseUploadQueueR
       const createRes = await api.createUploads(
         ready.map((it) => ({
           fileName: it.file.name,
-          contentType: it.file.type || 'audio/mpeg',
+          contentType: it.file.type || defaultContentTypeForFileName(it.file.name),
           size: it.file.size,
           clientId: it.localId,
         })),

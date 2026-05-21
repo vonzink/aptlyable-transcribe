@@ -2,7 +2,7 @@
   "name": "aptlyable",
   "version": "0.1.0",
   "private": true,
-  "description": "AptlyAble — bulk MP3 transcription (Next.js + AWS) with multi-provider transcription.",
+  "description": "AptlyAble — bulk MP3/MP4 transcription (Next.js + AWS) with multi-provider transcription.",
   "workspaces": [
     "packages/*",
     "apps/*",

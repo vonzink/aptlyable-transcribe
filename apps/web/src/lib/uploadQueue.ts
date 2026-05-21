@@ -1,3 +1,5 @@
+import { defaultContentTypeForFileName } from '@aptlyable/shared';
+
 /**
  * Upload one File to a presigned S3 URL via XHR (so we can report progress).
  * Resolves when the PUT returns 2xx; rejects otherwise.
@@ -12,7 +14,7 @@ export function putFileToS3(params: {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', url);
-    xhr.setRequestHeader('Content-Type', file.type || 'audio/mpeg');
+    xhr.setRequestHeader('Content-Type', file.type || defaultContentTypeForFileName(file.name));
 
     if (onProgress) {
       xhr.upload.addEventListener('progress', (ev) => {

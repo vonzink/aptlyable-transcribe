@@ -89,7 +89,7 @@ export default function HomePage() {
           AptlyAble Bulk Transcriber
         </h1>
         <p className="text-sm text-slate-600">
-          Drag and drop MP3 files. Pick an engine — Deepgram Nova-3, OpenAI gpt-4o-transcribe, or AssemblyAI Universal-2.
+          Drag and drop MP3 or MP4 files. Pick an engine — Deepgram Nova-3, OpenAI gpt-4o-transcribe, or AssemblyAI Universal-2.
         </p>
       </header>
 

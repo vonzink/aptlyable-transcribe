@@ -15,7 +15,7 @@ export function JobsTable({ jobs, onView, onRetry }: Props) {
   if (jobs.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-        No jobs yet. Upload some MP3 files above to get started.
+        No jobs yet. Upload some MP3 or MP4 files above to get started.
       </div>
     );
   }

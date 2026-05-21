@@ -1,18 +1,11 @@
 import { z } from 'zod';
+import {
+  getSupportedMediaExtension,
+  isSupportedMediaContentType,
+  SUPPORTED_MEDIA_LABEL,
+} from '@aptlyable/shared';
 import { config } from './config';
 import { ALL_PROVIDERS, type TranscriptionProviderName } from '../types/job';
-
-/**
- * MP3 must end with .mp3 and have an audio/mpeg-ish content type.
- * Some browsers send "audio/mp3" or "audio/mpeg3" — accept those too.
- */
-const ALLOWED_CONTENT_TYPES = new Set([
-  'audio/mpeg',
-  'audio/mp3',
-  'audio/mpeg3',
-  'audio/x-mpeg-3',
-  'audio/x-mp3',
-]);
 
 /**
  * Sanitize a filename for safe S3 keys + display:
@@ -33,7 +26,7 @@ export function sanitizeFileName(input: string): string {
 
   const trimmed = cleaned.slice(0, 200);
   if (!trimmed) return 'audio.mp3';
-  if (!/\.mp3$/i.test(trimmed)) {
+  if (!getSupportedMediaExtension(trimmed)) {
     return `${trimmed}.mp3`;
   }
   return trimmed;
@@ -71,19 +64,18 @@ export interface FileValidation {
   reason?: string;
 }
 
-/** Validate a single file's metadata against MP3, size, and provider rules. */
+/** Validate a single file's metadata against media type, size, and provider rules. */
 export function validateFile(
   input: FileInput,
   provider: TranscriptionProviderName,
 ): FileValidation {
-  const lower = input.fileName.toLowerCase();
-  if (!lower.endsWith('.mp3')) {
-    return { ok: false, reason: 'Only .mp3 files are supported.' };
+  if (!getSupportedMediaExtension(input.fileName)) {
+    return { ok: false, reason: 'Only .mp3 and .mp4 files are supported.' };
   }
-  if (!ALLOWED_CONTENT_TYPES.has(input.contentType.toLowerCase())) {
+  if (!isSupportedMediaContentType(input.fileName, input.contentType)) {
     return {
       ok: false,
-      reason: `Unsupported content type "${input.contentType}". Expected audio/mpeg.`,
+      reason: `Unsupported content type "${input.contentType}". Expected ${SUPPORTED_MEDIA_LABEL} media.`,
     };
   }
   if (input.size <= 0) {
